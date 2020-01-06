@@ -1,0 +1,276 @@
+---
+title: "Employment Outcomes of Degree Programs in Singapore"
+author: "Duanyue Yun"
+date: "12/21/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+## I. Introduction
+
+Unlike college students in the United States who have the freedom to explore different subjects in the first two years of college and then declare a major, prospective college students in Asian countries like Singapore have to decide which degree program to apply and enroll before entering college. 
+Therefore, the importance of such a decision is self-evident. 
+During the decision-making process, besides personal interest and aptitude, key employment outcomes such as employment rate and gross monthly income are also important factors to consider. 
+Therefore, this project aims to investigate which degree programs produce talents that are highly sought after and well-compensated by the job market. 
+Hopefully the exploratory analysis will help prospective students make more informed decisions when choosing a degree program in Singapore.
+
+## II. Data sources
+
+The data used to support the analysis are obtained from the Singapore government's open data website, with the title Graduate Employment Survey - NTU, NUS, SIT, SMU & SUTD [link](https://data.gov.sg/dataset/graduate-employment-survey-ntu-nus-sit-smu-sutd). 
+According to the documentation, the Graduate Employment Survey (GES) is jointly conducted by Nanyang Technological University (NTU), National University of Singapore (NUS), Singapore Management University (SMU), Singapore Institute of Technology (SIT) (from 2014) and Singapore University of Technology and Design (SUTD) (from 2015) annually to survey the employment conditions of graduates about six months after their final examinations. The overall results are managed and published by the Ministry of Education (MOE).
+
+The raw data contain 570 records and 12 variables. The time span of the dataset ranges from year 2013 to 2017.
+Categorical variables include year (`year`), university (`university`) and school under university (`school`). 
+There are also character variables: title of the degree program (`degree`). 
+Numerical variables include overall employment rate (`employment_rate_overall`), full-time permanent employment rate (`employment_rate_ft_perm`), basic monthly salary - mean (`basic_monthly_mean`), basic monthly salary - median (`basic_monthly_median`), gross monthly salary - mean (`gross_monthly_mean`), gross monthly salary - median (`gross_monthly_median`), gross monthly salary - 25th percentile (`gross_mthly_25_percentile`) and gross monthly salary - 75th percentile (`gross_mthly_75_percentile`).
+
+## III. Missing values
+
+57 rows, which is approximately 10% of the data, have missing values in all numerical variables (employment rates and salaries). According to the data documentation, this can be due to 2 reasons: the small number of graduates or low response rates; the graduates are still completing their practical training and thus have not entered the labor force.
+These observations are filtered out since the main variables of interest are missing.
+
+Next, there are some rows that have missing values in the `school` column. The rows are all under SUTD. And further investigation shows that those rows form all observations of SUTD. 
+
+This is because there is no school under the university, but this does not affect our data visualization since we will only differentiate programs at the university level. Therefore, we decide to keep those observations.
+
+Below is a chart showing patterns in missing values.
+
+```{r, message=FALSE}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(stringi)
+library(stringr)
+library(ggthemes)
+library(extracat)
+```
+
+```{r}
+ges <- read_csv("graduate-employment-survey.csv", na="na")
+visna(ges, sort = "r")
+```
+
+
+## IV. Data transformation
+
+Data from SIT are excluded from the analysis because almost all programs offered by SIT are jointly offered together with an overseas university. 
+
+Since the `degree` column contains the specific title of a degree program, it is very difficult to aggregate data on variables of interest (employment rates and salaries). To address this issue, a new column `area` was created to denote the category of a degree program. The `area` column is encoded using regular expressions based on the `school` column. For example, if the degree program is offered by the Business School, it is encoded as a program in the Business area. Programs under SUTD are classified as Engineering after examination. There are 14 unique categories in total.
+
+Next, since the `university` column shows the full name of the universities, it is recoded with corresponding alphabetical initials so that the legend of certain plots is more succinct.
+
+```{r, message=FALSE}
+# Filter out NAs
+ges <- ges %>%
+  filter(!is.na(employment_rate_overall)) %>%
+  filter(university != "Singapore Institute of Technology")
+
+# Standardize string encoding
+ges$university <- str_to_title(stri_enc_toutf8(ges$university))
+ges$school<- str_to_title(stri_enc_toutf8(ges$school))
+ges$degree <- str_to_title(stri_enc_toutf8(ges$degree))
+
+# Recode university levels
+ges$university <- fct_recode(ges$university, 
+                                         NTU = "Nanyang Technological University",
+                                         NUS = "National University Of Singapore", 
+                                         SMU = "Singapore Management University" ,
+                                         SUTD = "Singapore University Of Technology And Design")
+```
+
+```{r}
+# Define a function to detect patterns
+if_contain <- function(string, pattern) {
+  return(str_detect(str_to_lower(string), pattern))}
+
+# Create the area column
+ges <- ges %>%
+  mutate(area = case_when(if_contain(school, 'business') | if_contain(school, 'accountancy')  ~ "Business",
+                          if_contain(school, 'comput*') | (if_contain(university, 'ntu') & if_contain(degree, 'comput*')) |
+                           if_contain(school, 'information systems') ~ "Computing",
+                          if_contain(school, 'engineering') | if_contain(university, 'sutd') ~ "Engineering",
+                          if_contain(school, 'social sciences') | if_contain(school, 'economics') ~ "Arts & Social Sciences",
+                          if_contain(school, 'science*') ~ "Sciences",
+                          if_contain(school, 'education') ~ "Education",
+                          if_contain(school, 'sport*') ~ "Sports Science And Management",
+                          if_contain(school, 'dentistry') ~ "Dentistry",
+                          if_contain(school, 'law') ~ "Law",
+                          if_contain(school, 'multi*') ~ "Multi-Disciplinary",
+                          if_contain(school, 'design') ~ "Design & Environment",
+                          if_contain(school, 'yale*') ~ "Liberal Arts (Yale NUS)",
+                          if_contain(school, 'medicine') ~ "Medicine",
+                          if_contain(school, 'music') ~ "Music"
+                          ))
+```
+
+## V. Results
+
+### What Programs are offered in Singapore?
+
+```{r}
+ges_2017 <- ges %>% filter(year == 2017)
+
+ges_2017 %>%
+  group_by(area) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(x=fct_reorder(area, n, .desc = FALSE), y=n)) +
+  geom_col() +
+  coord_flip() +
+  xlab("area") +
+  ylab("program count") +
+  ggtitle("What Programs are offered in Singapore?") +
+  theme_economist()
+```
+
+```{r, echo=FALSE}
+ges_2017 %>% 
+  group_by(university, area) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n)) %>%
+  ggplot(aes(x=fct_reorder(area, n, .desc = FALSE), y=n)) +
+  geom_col() +
+  facet_grid(~fct_infreq(university)) +
+  xlab("area") +
+  ylab("program count") +
+  labs(title = "Specific Areas of Each University",
+       caption = "Universities ordered by the number of course areas offered") +
+  coord_flip() +
+  theme_economist()
+```
+
+As a starting point, we look at what kind of degree programs are offered in Singapore. Overall, Engineering programs are clearly dominant in number, followed by Business and Sciences. When faceted by university, we observe that NUS offers the widest range of programs, covering all areas except for Education. As its name suggests, NTU mostly offers programs in Engineering and Sciences, while SMU focuses on Business and Social Sciences and SUTD only offers programs in Engineering.  
+
+### Degree Category Ranking by Employment Outcomes
+
+```{r}
+overall_avg_income <- mean(ges_2017$gross_monthly_mean)
+ges_2017 %>%
+  group_by(area) %>%
+  summarise(avg_income = mean(gross_monthly_mean)) %>%
+  ggplot(aes(x=fct_reorder(area, avg_income, .desc = FALSE), y=avg_income)) +
+  geom_point() +
+  xlab("area") +
+  ylab("average gross monthly income") +
+  geom_hline(yintercept = overall_avg_income) +
+  coord_flip() +
+  ggtitle("Degree Category Ranked by Average Income") +
+  annotate("text", x="Computing", y= 3350, label = "overall average") +
+  theme_economist()
+```
+
+In terms of income, Law and Music occupy the two extremes of the spectrum, with Law being the highest paid degree and Music being the lowest. Computing, Liberal Arts degrees offered by Yale-NUS College and Dentistry are among the highest paying programs. The other categories have income in the 3000 range.
+
+```{r}
+overall_ft_perm <- mean(ges_2017$employment_rate_ft_perm)
+ges_2017 %>%
+  group_by(area) %>%
+  summarise(avg_empt = mean(employment_rate_ft_perm)) %>%
+  ggplot(aes(x=fct_reorder(area, avg_empt, .desc = FALSE), y=avg_empt)) +
+  geom_point() +
+  xlab("area") +
+  ylab("average employment rate") +
+  geom_hline(yintercept = overall_ft_perm) +
+  coord_flip() +
+  ggtitle("Degree Category Ranked by Permanent\nFull-time Employment Rate") +
+  annotate("text", x="Dentistry", y= 70, label = "overall average") +
+  theme_economist()
+```
+
+In terms of employment rate, again Music performs the worst. Well-compensated programs like Dentistry, Law, Business and Medicine also have high employment rates. Education, which has lower than average income, has 100% employment rate.
+
+### Trend in Employment Outcomes
+
+Liberal Arts degrees offered by Yale-NUS College are excluded from trend analysis because only one year of data are available.
+
+
+
+```{r}
+ges %>%
+  filter(area != "Liberal Arts (Yale NUS)") %>%
+  group_by(area, year) %>%
+  summarise(avg_income = mean(gross_monthly_mean)) %>%
+  mutate(rescaled_income = 100*avg_income/first(avg_income)) %>%
+  ggplot(aes(x=year, y=rescaled_income)) +
+  geom_point() +
+  geom_line() +
+  #scale_x_discrete(breaks = c(2013, 2014, 2015, 2016, 2017), labels = c('13','14','15','16','17')) +
+  facet_wrap(~area) +
+  ggtitle("Trend in Average Income") +
+  ylab("rescaled income") +
+  theme_economist(8) 
+  #theme(axis.text.x = element_text(angle = 30, hjust = 0))
+  #scale_x_discrete(breaks = c(2013, 2014, 2015, 2016, 2017), labels = c('13','14','15','16','17'))
+ # scale_x_discrete(breaks = c(2013, 2014, 2015, 2016, 2017), labels = c('13','14','15','16','17'))
+
+```
+
+When examining the trend in average income, there are several patterns: 
+
+* for top paying programs like Law and Dentistry, salaries are rather stagnant over the past five years.
+
+* for Arts & Social Sciences, Business and Computing, the increasing trend in salaries is the most obvious. 
+
+* only Music shows a decreasing trend.
+
+```{r}
+ges %>%
+  filter(area != "Liberal Arts (Yale NUS)") %>%
+  group_by(area, year) %>%
+  summarise(avg_empt = mean(employment_rate_ft_perm)) %>%
+  ungroup() %>%
+  #mutate(rescaled_income = 100*avg_income/first(avg_income)) %>%
+  ggplot(aes(x=year, y=avg_empt)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~area) +
+  ylab("average employment rate") +
+  ggtitle("Trend in Average Permanent Full-time Employment Rate") +
+  theme_economist(8)
+  #geom_hline(yintercept = 3500) +
+```
+
+Permanent full-time employment rate remains quite stable for most categories. The employment rate for multi-disciplinary programs shows an increasing trend but still remains lower than other categories.
+
+## VI. Interactive Component
+
+A shiny app is created to allow users to explore how specific programs within a particular area of interest rank based on a metric of the user's choice. [link to app](https://yundyue.shinyapps.io/Degree_Programs_in_SG/)
+
+## VII. Conclusion  
+
+In conclusion, it seems that degree programs offered by local universities in Singapore are dominated by science, technology, engineering and mathematics (STEM) and business fields. Programs in law, dentistry, business and computing produce talents that are both hightly sought after and well-compensated. However, in terms of temporal trend, income of graduates from programs in business and computing shows an increasing trend, while for programs in law and dentistry, income remains rather stagnant over the time span of data.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
