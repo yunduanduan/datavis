@@ -1,0 +1,61 @@
+---
+title: "Missing Values"
+author: "Duanyue Yun"
+date: "11/19/2019"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+library(extracat)
+```
+
+````{r}
+graduate_survey <- read_csv("graduate-employment-survey.csv", na = "na")
+```
+
+```{r}
+# number of NAs by column
+colSums(is.na(graduate_survey)) %>%
+  sort(decreasing = TRUE)
+```
+
+
+
+```{r}
+# Visualize patterns in missing values
+visna(graduate_survey, sort = "r")
+```
+
+By examining the number of missing values per column and the patterns, we observe that for some degree programs, there are no data on employment rates or salaries. That is approximately 10% of the entire dataset. After reading the data documentation, we learn that this can be due to 2 reasons: the small number of graduates or low response rates; the graduates are still completing their practical training.
+
+```{r}
+# Examining missing values in the school column
+graduate_survey %>%
+  filter(is.na(school))
+
+graduate_survey %>%
+  filter(university == "Singapore University of Technology and Design")
+```
+
+For rows that have school missing only, they are all Singapore University of Technology and Design (SUTD). And the rows form all observations of (SUTD). This is because there is no school under the university. Therefore, to build our data visualizations, we only filter out rows with missing values in employment rates and salaries.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

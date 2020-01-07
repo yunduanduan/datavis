@@ -1,0 +1,68 @@
+---
+title: "Data Transformation"
+author: "Duanyue Yun"
+date: "1/7/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(stringi)
+library(stringr)
+library(ggthemes)
+library(extracat)
+```
+
+```{r}
+ges <- read_csv("graduate-employment-survey.csv", na="na")
+```
+
+```{r, message=FALSE}
+# Filter out NAs
+ges <- ges %>%
+  filter(!is.na(employment_rate_overall)) %>%
+  filter(university != "Singapore Institute of Technology")
+
+# Standardize string encoding
+ges$university <- str_to_title(stri_enc_toutf8(ges$university))
+ges$school<- str_to_title(stri_enc_toutf8(ges$school))
+ges$degree <- str_to_title(stri_enc_toutf8(ges$degree))
+
+# Recode university levels
+ges$university <- fct_recode(ges$university, 
+                                         NTU = "Nanyang Technological University",
+                                         NUS = "National University Of Singapore", 
+                                         SMU = "Singapore Management University" ,
+                                         SUTD = "Singapore University Of Technology And Design")
+```
+
+```{r}
+# Define a function to detect patterns
+if_contain <- function(string, pattern) {
+  return(str_detect(str_to_lower(string), pattern))}
+
+# Create the area column
+ges <- ges %>%
+  mutate(area = case_when(if_contain(school, 'business') | if_contain(school, 'accountancy')  ~ "Business",
+                          if_contain(school, 'comput*') | (if_contain(university, 'ntu') & if_contain(degree, 'comput*')) |
+                           if_contain(school, 'information systems') ~ "Computing",
+                          if_contain(school, 'engineering') | if_contain(university, 'sutd') ~ "Engineering",
+                          if_contain(school, 'social sciences') | if_contain(school, 'economics') ~ "Arts & Social Sciences",
+                          if_contain(school, 'science*') ~ "Sciences",
+                          if_contain(school, 'education') ~ "Education",
+                          if_contain(school, 'sport*') ~ "Sports Science And Management",
+                          if_contain(school, 'dentistry') ~ "Dentistry",
+                          if_contain(school, 'law') ~ "Law",
+                          if_contain(school, 'multi*') ~ "Multi-Disciplinary",
+                          if_contain(school, 'design') ~ "Design & Environment",
+                          if_contain(school, 'yale*') ~ "Liberal Arts (Yale NUS)",
+                          if_contain(school, 'medicine') ~ "Medicine",
+                          if_contain(school, 'music') ~ "Music"
+                          ))
+```
